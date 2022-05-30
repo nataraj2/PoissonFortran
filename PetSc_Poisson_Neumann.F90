@@ -52,19 +52,10 @@ subroutine solve_poisson(dm)
 	character(len=50) :: file_name
     PetscInt :: rank, ierror
 
-	call MPI_Comm_rank(PETSC_COMM_WORLD, rank, ierror)
-
-	write(file_id, '(i0)') rank
-
-	file_name = 'sol_file_' // trim(adjustl(file_id)) // '.txt'
-
     call KSPGetDM(ksp,dm,ierr)
     call DMDAGetCorners(dm,xs,ys,PETSC_NULL_INTEGER,xm,ym,PETSC_NULL_INTEGER,ierr)
     call DMDAVecGetArrayF90(dm,x,xx,ierr);CHKERRQ(ierr)
 
-    print*, "xs, ys = " , xs, ys
-    print*, "xe, ye = " , xs+xm-1, ys+ym-1 
- 
     do j=ys,ys+ym-1
        do i=xs,xs+xm-1
 			pressure(i,j) = xx(i,j)
