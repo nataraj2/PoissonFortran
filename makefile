@@ -11,8 +11,8 @@ LIBS=-lpetsc -llapack -lblas  -lc++ -ldl -lmpifort -lmpi -lpmpi -lgfortran -lqua
 
 _DEPS = 
 
-OBJ1 = ModuleVariables.o PetSc_Poisson_Neumann.o PoissonFortran2D.o
-OBJ2 = ModuleVariables.o PetSc_Poisson_Periodic.o PoissonFortran2D.o
+OBJ1 = ModuleVariables.o PetSc_Poisson_Neumann.o PoissonFortran2D_Neumann.o
+OBJ2 = ModuleVariables.o PetSc_Poisson_Periodic.o PoissonFortran2D_Periodic.o
 
 %.o: %.F90 $(DEPS)
 	$(FC) -c -o $@ $< $(IDIR) $(FFLAGS)
