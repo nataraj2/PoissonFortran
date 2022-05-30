@@ -103,10 +103,7 @@ subroutine solve_poisson(dm)
 
 	do j=ys,ys+ym-1
        do i=xs,xs+xm-1
-			xval = (i+0.5)*Hx
-			yval = (j+0.5)*Hy	
-			xx(i,j) = poisson_rhs(i,j) 
-			
+	   		xx(i,j) = poisson_rhs(i,j) 
        end do
     end do
 	
