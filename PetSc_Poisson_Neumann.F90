@@ -89,6 +89,7 @@ subroutine solve_poisson(dm)
     end subroutine
 
     subroutine ComputeRHS(ksp,b,dummy,ierr)
+	use ModuleVariables
     use petscksp
     use petscdmda
     implicit none
@@ -106,15 +107,6 @@ subroutine solve_poisson(dm)
 	Vec dummyVecs(1)
 
     call KSPGetDM(ksp,dm,ierr)
-    call DMDAGetInfo(dm,PETSC_NULL_INTEGER,mx,my,PETSC_NULL_INTEGER,PETSC_NULL_INTEGER,PETSC_NULL_INTEGER,          &
-     &            PETSC_NULL_INTEGER,PETSC_NULL_INTEGER,PETSC_NULL_INTEGER,PETSC_NULL_INTEGER,          &
-     &            PETSC_NULL_INTEGER,PETSC_NULL_INTEGER,PETSC_NULL_INTEGER,ierr)
-
-    Hx = 1.0 / real(mx)
-    Hy = 1.0 / real(my)
-    h = Hx*Hy
-	!call ComputePoissonRHS(check_rhs)
-
     call DMDAGetCorners(dm,xs,ys,PETSC_NULL_INTEGER,xm,ym,PETSC_NULL_INTEGER,ierr)
     call DMDAVecGetArrayF90(dm,b,xx,ierr);CHKERRQ(ierr)
 
@@ -122,11 +114,7 @@ subroutine solve_poisson(dm)
        do i=xs,xs+xm-1
 			xval = (i+0.5)*Hx
 			yval = (j+0.5)*Hy	
-			!if(i.eq.0 .and. j.eq. 0)then
-			!	xx(i,j) = cos(2.0*3.1415*xval)*cos(2.0*3.1415*yval)
-			!else
-				xx(i,j) = 8.0*3.1415*3.1415*cos(2.0*3.1415*xval)*cos(2.0*3.1415*yval)*Hx*Hy;
-			!end if
+			xx(i,j) = poisson_rhs(i,j) 
 			
        end do
     end do
