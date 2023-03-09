@@ -7,11 +7,11 @@ T*/
 /*
 Laplacian in 2D. Modeled by the partial differential equation
 
-   div  grad u = f,  0 < x,y < 1,
+   div  grad u = -f,  0 < x,y < 1,
 
 with forcing function
 
-   f = e^{-(1 - x)^2/\nu} e^{-(1 - y)^2/\nu}
+   f = 8 * pi**2 * cos(2*pi*x) * cos(2*pi*y) 
 
 with pure Neumann boundary conditions
 
