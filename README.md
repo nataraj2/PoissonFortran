@@ -18,9 +18,9 @@ $u(x,y) = \cos(2\pi x)\cos(2\pi y)$.
 
 ## Installation and compilation
 
-```1. git clone https://github.com/nataraj2/petsc.git```
-```2. ./configure --with-cc=mpicc --with-cxx=mpicxx --with-fc=mpif90```
-3. Then set PETSC_DIR = <path>. The output of the above on the screen will tell the exact command. i
-Just copy paste it. Add it to the `bashrc` file.
-4. sh run_poisson2d_neumann.sh
-5. python PoissonSolution.py - plots the contours of the exact and petsc solutions
+```1. git clone https://github.com/nataraj2/petsc.git```  
+```2. ./configure --with-cc=mpicc --with-cxx=mpicxx --with-fc=mpif90```  
+3. Then set PETSC_DIR = <path>. The output of the above on the screen will tell the exact command.  
+Just copy paste it. Add it to the `bashrc` file.  
+4. sh run_poisson2d_neumann.sh  
+5. python PoissonSolution.py - plots the contours of the exact and petsc solutions.    
