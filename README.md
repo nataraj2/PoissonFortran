@@ -1,7 +1,7 @@
 # Parallel Poisson solver using PETSc (C++ and Fortran)
 
-<img src="Images/PetscSolution.png?raw=true&v=100" alt="your_alternative_text" width="100%" height="100%"><img src="Images/ExactSolution.png?raw=true&v=100" alt="your_alternative_text" width="100%" height="100%">
-<img src="Images/Comparison.png?raw=true&v=100" alt="your_alternative_text" width="100%" height="100%">
+<img src="Images/PetscSolution.png?raw=true&v=50" alt="your_alternative_text" width="50%" height="50%"><img src="Images/ExactSolution.png?raw=true&v=50" alt="your_alternative_text" width="50%" height="50%">
+<img src="Images/Comparison.png?raw=true&v=50" alt="your_alternative_text" width="50%" height="50%">
 
 This repository containes the code for solving a Poisson equation in parallel in two dimensions in PetSc. It solves the inhomogeneous 
 Poisson equation $\nabla^2 u = f$ with Neumann boundary conditions on all boundaries.
