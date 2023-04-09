@@ -8,8 +8,8 @@ This repository containes the code for solving a Poisson equation in parallel in
 Poisson equation with Neumann boundary conditions on all boundaries.
 
 ## Governing equation, domain and boundary conditions
-The Poisson equation in two-dimensions is given by
-$\cfrac{\partial^ u}{\partial x^2} + \cfrac{\partial^ u}{\partial y^2} = f$.
+The Poisson equation in two-dimensions is given by  
+$\cfrac{\partial^2 u}{\partial x^2} + \cfrac{\partial^2 u}{\partial y^2} = f$.  
 In this example $f = 8\pi^2\cos(2\pi x)cos(2\pi y)$ and the domain is given by 
 $(0,1)\times(0,1)$. Neumann boundary conditions are imposed on all boundaries 
 $\cfrac{\partial u}{\partial n} = 0$. The exact solution is given by 
