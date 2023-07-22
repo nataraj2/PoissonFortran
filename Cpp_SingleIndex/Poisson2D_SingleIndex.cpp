@@ -1,16 +1,7 @@
-
-static char help[] = "Solves a linear system in parallel with KSP,\n\
-demonstrating how to register a new preconditioner (PC) type.\n\
-Input parameters include:\n\
-  -m <mesh_x>       : number of mesh points in x-direction\n\
-  -n <mesh_y>       : number of mesh points in y-direction\n\n";
-
 #include <iostream>
 #include <vector>
 
 #include <petscksp.h>
-
-PETSC_EXTERN PetscErrorCode PCCreate_Jacobi(PC);
 
 int my_rank, nprocs;
 int my_nx, my_ny;
@@ -21,64 +12,9 @@ std::vector<int> my_nx_vec, my_ny_vec, offset_i_vec, offset_j_vec;
 std::vector<int> istart_vec, iend_vec, jstart_vec, jend_vec, idx_start_vec;
 double dx, dy;
 
-
-
-int get_idx_glo(const int i_glo, const int j_glo) {
-  // Find to which rank the i and j belong to
-  int rank_curr=-1;
-
-  for (int rank = 0; rank <= nprocs - 1; rank++) {
-    if ((i_glo - istart_vec[rank]) * (i_glo - iend_vec[rank]) <= 0 and
-        (j_glo - jstart_vec[rank]) * (j_glo - jend_vec[rank]) <= 0) {
-      rank_curr = rank;
-      break;
-    }
-  }
-
-  if(rank_curr == -1){
-		std::cout << "Could not find " << i_glo << " , " << j_glo << " in any rank " << "\n";
-  }
-
-  int i_loc = i_glo - offset_i_vec[rank_curr];
-  int j_loc = j_glo - offset_j_vec[rank_curr];
-
-  int idx_loc = j_loc * my_nx_vec[rank_curr] + i_loc;
-  int idx_glo = idx_loc + idx_start_vec[rank_curr];
-
-  return idx_glo;
-}
-
-
-void output_solution_to_file(Vec &vec1, Vec &vec2) {
-  FILE *sol_file;
-
-  std::string filename;
-  PetscInt my_rank;
-
-  MPI_Comm_rank(PETSC_COMM_WORLD, &my_rank);
-
-  filename = "sol_file" + std::to_string(my_rank);
-  filename = filename + ".txt";
-
-  PetscScalar values[1], value_exact[1];
-  PetscInt row[1];
-
-  sol_file = fopen(filename.c_str(), "w");
-  for (int i = 0; i < my_nx; i++) {
-    for (int j = 0; j < my_ny; j++) {
-	  int i_glo = offset_i + i;
-	  int j_glo = offset_j + j;	
-      row[0] = get_idx_glo(i_glo, j_glo);
-      double x = xmin + (i_glo + 0.5) * dx;
-      double y = ymin + (j_glo + 0.5) * dy;
-      VecGetValues(vec1, 1, row, values);
-      fprintf(sol_file, "%d %d %0.15g %0.15g %0.15g\n", i_glo, j_glo, x, y,
-              values[0]);
-    }
-  }
-
-  fclose(sol_file);
-}
+void output_solution_to_file(Vec &vec1, Vec &vec2);
+int get_idx_glo(const int i_glo, const int j_glo);
+PetscErrorCode MyKSPMonitorShort(KSP ksp, PetscInt its, PetscReal rnorm, void *ctx);
 
 int main(int argc, char **args) {
   Vec x, b, b_exact; /* approx solution, RHS, exact solution */
@@ -86,9 +22,7 @@ int main(int argc, char **args) {
   KSP ksp;           /* linear solver context */
   PetscErrorCode ierr;
 
-  ierr = PetscInitialize(&argc, &args, (char *)0, help);
-  if (ierr)
-    return ierr;
+  ierr = PetscInitialize(NULL, NULL, NULL, NULL);CHKERRQ(ierr);
 
   // SETUP BEGINS
 
@@ -97,6 +31,9 @@ int main(int argc, char **args) {
 
   MPI_Comm_rank(PETSC_COMM_WORLD, &my_rank);
   MPI_Comm_size(PETSC_COMM_WORLD, &nprocs);
+
+  // Make the layout available for all processors. Hence all processors
+  // will know the imin, imax, jmin, jmax, offset_i, offset_j etc.
 
   my_nx_vec.resize(nprocs);
   my_ny_vec.resize(nprocs);
@@ -159,18 +96,7 @@ int main(int argc, char **args) {
 
   // SETUP ENDS
 
-  /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-         Compute the matrix and right-hand-side vector that define
-         the linear system, Ax = b.
-     - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-  /*
-     Create parallel matrix, specifying only its global dimensions.
-     When using MatCreate(), the matrix format can be specified at
-     runtime. Also, the parallel partitioning of the matrix can be
-     determined by PETSc at runtime.
-  */
-  ierr = MatCreate(PETSC_COMM_WORLD, &A);
-  CHKERRQ(ierr);
+  ierr = MatCreate(PETSC_COMM_WORLD, &A);CHKERRQ(ierr);
 
   PetscInt matrix_size = nx * ny;
 
@@ -210,7 +136,6 @@ int main(int argc, char **args) {
   PetscScalar val[5];
 
   int i_glo, j_glo;
-
 
   offset_i = offset_i_vec[my_rank];
   offset_j = offset_j_vec[my_rank];
@@ -317,7 +242,6 @@ int main(int argc, char **args) {
   VecAssemblyBegin(b_exact);
   VecAssemblyEnd(b_exact);
 
-
   /*ierr = MatNullSpaceCreate(PETSC_COMM_WORLD, PETSC_TRUE, 0, 0, &nullspace);
   CHKERRQ(ierr);
   ierr = MatNullSpaceRemove(nullspace, b);
@@ -337,51 +261,23 @@ int main(int argc, char **args) {
 
   PetscViewerDestroy(&viewer); // Destroy the viewer*/
 
-  /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-                Create the linear solver and set various options
-     - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-  /*
-     Create linear solver context
-  */
-  ierr = KSPCreate(PETSC_COMM_WORLD, &ksp);
-  CHKERRQ(ierr);
+  ierr = KSPCreate(PETSC_COMM_WORLD, &ksp);CHKERRQ(ierr);
 
   /*
      Set operators. Here the matrix that defines the linear system
      also serves as the preconditioning matrix.
   */
-  ierr = KSPSetOperators(ksp, A, A);
-  CHKERRQ(ierr);
+  ierr = KSPSetOperators(ksp, A, A);CHKERRQ(ierr);
 
-  /*
-    Set runtime options, e.g.,
-        -ksp_type <type> -pc_type <type> -ksp_monitor -ksp_rtol <rtol>
-    These options will override those specified above as long as
-    KSPSetFromOptions() is called _after_ any other customization
-    routines.
-  */
-  ierr = KSPSetFromOptions(ksp);
-  CHKERRQ(ierr);
-
-  /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-                      Solve the linear system
-     - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+  ierr = KSPMonitorSet(ksp, MyKSPMonitorShort, NULL, NULL); CHKERRQ(ierr);
 
   ierr = KSPSolve(ksp, b, x);CHKERRQ(ierr);
 
   output_solution_to_file(x, b_exact);
 
-  /*
-     Free work space.  All PETSc objects should be destroyed when they
-     are no longer needed.
-  */
-  ierr = KSPDestroy(&ksp);
-  CHKERRQ(ierr);
-  ierr = VecDestroy(&b);
-  CHKERRQ(ierr);
-  ierr = MatDestroy(&A);
-  CHKERRQ(ierr);
+  ierr = KSPDestroy(&ksp);CHKERRQ(ierr);
+  ierr = VecDestroy(&b);CHKERRQ(ierr);
+  ierr = MatDestroy(&A);CHKERRQ(ierr);
 
   /*
      Always call PetscFinalize() before exiting a program.  This routine
@@ -393,9 +289,63 @@ int main(int argc, char **args) {
   return ierr;
 }
 
-/*TEST
+int get_idx_glo(const int i_glo, const int j_glo) {
+  // Find to which rank the i and j belong to
+  int rank_curr=-1;
 
-   test:
-      args: -ksp_gmres_cgs_refinement_type refine_always
+  for (int rank = 0; rank <= nprocs - 1; rank++) {
+    if ((i_glo - istart_vec[rank]) * (i_glo - iend_vec[rank]) <= 0 and
+        (j_glo - jstart_vec[rank]) * (j_glo - jend_vec[rank]) <= 0) {
+      rank_curr = rank;
+      break;
+    }
+  }
 
-TEST*/
+  if(rank_curr == -1){
+		std::cout << "Could not find " << i_glo << " , " << j_glo << " in any rank " << "\n";
+  }
+
+  int i_loc = i_glo - offset_i_vec[rank_curr];
+  int j_loc = j_glo - offset_j_vec[rank_curr];
+
+  int idx_loc = j_loc * my_nx_vec[rank_curr] + i_loc;
+  int idx_glo = idx_loc + idx_start_vec[rank_curr];
+
+  return idx_glo;
+}
+
+void output_solution_to_file(Vec &vec1, Vec &vec2) {
+  FILE *sol_file;
+
+  std::string filename;
+  PetscInt my_rank;
+
+  MPI_Comm_rank(PETSC_COMM_WORLD, &my_rank);
+
+  filename = "sol_file" + std::to_string(my_rank);
+  filename = filename + ".txt";
+
+  PetscScalar values[1], value_exact[1];
+  PetscInt row[1];
+
+  sol_file = fopen(filename.c_str(), "w");
+  for (int i = 0; i < my_nx; i++) {
+    for (int j = 0; j < my_ny; j++) {
+	  int i_glo = offset_i + i;
+	  int j_glo = offset_j + j;	
+      row[0] = get_idx_glo(i_glo, j_glo);
+      double x = xmin + (i_glo + 0.5) * dx;
+      double y = ymin + (j_glo + 0.5) * dy;
+      VecGetValues(vec1, 1, row, values);
+      fprintf(sol_file, "%d %d %0.15g %0.15g %0.15g\n", i_glo, j_glo, x, y,
+              values[0]);
+    }
+  }
+
+  fclose(sol_file);
+}
+
+PetscErrorCode MyKSPMonitorShort(KSP ksp, PetscInt its, PetscReal rnorm, void *ctx) {
+    PetscPrintf(PETSC_COMM_WORLD, "Iteration %D: Residual Norm %e\n", its, (double)rnorm);
+    return 0;
+}
