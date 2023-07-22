@@ -21,6 +21,8 @@ std::vector<int> my_nx_vec, my_ny_vec, offset_i_vec, offset_j_vec;
 std::vector<int> istart_vec, iend_vec, jstart_vec, jend_vec, idx_start_vec;
 double dx, dy;
 
+
+
 int get_idx_glo(const int i_glo, const int j_glo) {
   // Find to which rank the i and j belong to
   int rank_curr=-1;
@@ -40,11 +42,12 @@ int get_idx_glo(const int i_glo, const int j_glo) {
   int i_loc = i_glo - offset_i_vec[rank_curr];
   int j_loc = j_glo - offset_j_vec[rank_curr];
 
-  int idx_loc = j_loc * my_nx + i_loc;
+  int idx_loc = j_loc * my_nx_vec[rank_curr] + i_loc;
   int idx_glo = idx_loc + idx_start_vec[rank_curr];
 
   return idx_glo;
 }
+
 
 void output_solution_to_file(Vec &vec1, Vec &vec2) {
   FILE *sol_file;
@@ -90,7 +93,7 @@ int main(int argc, char **args) {
   // SETUP BEGINS
 
   // Setting up a problem to demonstrate for just 4 processors
-  int nx = 100, ny = 100;
+  int nx = 200, ny = 100;
 
   MPI_Comm_rank(PETSC_COMM_WORLD, &my_rank);
   MPI_Comm_size(PETSC_COMM_WORLD, &nprocs);
@@ -105,15 +108,26 @@ int main(int argc, char **args) {
   jend_vec.resize(nprocs);
   idx_start_vec.resize(nprocs, 0.0);
 
-  my_nx_vec[0] = 50;
-  my_ny_vec[0] = 100;
+  my_nx_vec[0] = 130;
+  my_ny_vec[0] = 60;
   offset_i_vec[0] = 0;
   offset_j_vec[0] = 0;
 
-  my_nx_vec[1] = 50;
-  my_ny_vec[1] = 100;
-  offset_i_vec[1] = 50;
+  my_nx_vec[1] = 70;
+  my_ny_vec[1] = 60;
+  offset_i_vec[1] = 130;
   offset_j_vec[1] = 0;
+
+  my_nx_vec[2] = 130;
+  my_ny_vec[2] = 40;
+  offset_i_vec[2] = 0;
+  offset_j_vec[2] = 60;
+
+  my_nx_vec[3] = 70;
+  my_ny_vec[3] = 40;
+  offset_i_vec[3] = 130;
+  offset_j_vec[3] = 60;
+
 
   for (int rank = 0; rank <= nprocs - 1; rank++) {
     istart_vec[rank] = offset_i_vec[rank];
@@ -128,7 +142,7 @@ int main(int argc, char **args) {
     }
   }
 
-  for (int rank = 0; rank <= nprocs - 1; rank++) {
+  /*for (int rank = 0; rank <= nprocs - 1; rank++) {
 	if(my_rank == rank){
 		std::cout << "Rank is " << my_rank << "\n";
 		std::cout << "istart, iend, jstart, jend " << "\n";
@@ -138,7 +152,7 @@ int main(int argc, char **args) {
 		std::cout << idx_start_vec[rank] << "\n";
 	}
 	MPI_Barrier(PETSC_COMM_WORLD);
-  }
+  }*/
 
   dx = (xmax - xmin) / nx;
   dy = (ymax - ymin) / ny;
@@ -163,8 +177,7 @@ int main(int argc, char **args) {
   my_nx = my_nx_vec[my_rank];
   my_ny = my_ny_vec[my_rank];
 
-
-  ierr = MatSetSizes(A, my_nx * my_ny, PETSC_DECIDE, PETSC_DECIDE, matrix_size);CHKERRQ(ierr);
+  ierr = MatSetSizes(A, my_nx * my_ny, my_nx * my_ny, PETSC_DECIDE, PETSC_DECIDE);CHKERRQ(ierr);
   ierr = MatSetFromOptions(A);CHKERRQ(ierr);
   ierr = MatSetUp(A);CHKERRQ(ierr);
 
@@ -175,14 +188,14 @@ int main(int argc, char **args) {
   */
   ierr = MatGetOwnershipRange(A, &idx_start, &idx_end);CHKERRQ(ierr);
 
-  for (int rank = 0; rank < nprocs; rank++) {
+  /*for (int rank = 0; rank < nprocs; rank++) {
     if (my_rank == rank) {
       std::cout << "rank, Istart, Iend = " << my_rank << " " << idx_start << " "
                 << idx_end << "\n";
     }
     MPI_Barrier(PETSC_COMM_WORLD);
   }
-  MPI_Barrier(PETSC_COMM_WORLD);
+  MPI_Barrier(PETSC_COMM_WORLD);*/
 
   /*
      Set matrix elements for the 2-D, five-point stencil in parallel.
@@ -241,12 +254,6 @@ int main(int argc, char **args) {
       val[num] = -1.0 * ((PetscReal)(numj)*dx / dy + (PetscReal)(numi)*dy / dx);
       num++;
 
-	  if(row != j*my_nx + i + idx_start){
-			std::cout << "row and idx are diff " << row << " " << j*my_nx + i + idx_start << " " << i << " " << j << " " << my_rank <<  "\n";
-			std::cout << i_glo << " " << j_glo << "\n";
-			exit(0);
-		} 	
-
       MatSetValues(A, 1, &row, num, col, val, INSERT_VALUES);
     }
   }
@@ -277,7 +284,7 @@ int main(int argc, char **args) {
   PetscViewerDestroy(&viewer); // Destroy the viewer*/
 
   ierr = VecCreate(PETSC_COMM_WORLD, &b);CHKERRQ(ierr);
-  ierr = VecSetSizes(b, PETSC_DECIDE, matrix_size);CHKERRQ(ierr);
+  ierr = VecSetSizes(b, my_nx * my_ny, PETSC_DECIDE);CHKERRQ(ierr);
   ierr = VecSetFromOptions(b);CHKERRQ(ierr);
   ierr = VecDuplicate(b, &x);CHKERRQ(ierr);
   ierr = VecDuplicate(b, &b_exact);CHKERRQ(ierr);
@@ -361,8 +368,7 @@ int main(int argc, char **args) {
                       Solve the linear system
      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-  ierr = KSPSolve(ksp, b, x);
-  CHKERRQ(ierr);
+  ierr = KSPSolve(ksp, b, x);CHKERRQ(ierr);
 
   output_solution_to_file(x, b_exact);
 
