@@ -7,7 +7,7 @@ from scipy.sparse.linalg import gmres
 
 
 # Define the size of the matrix (n x n)
-m = 200
+m = 50
 
 xmin = 0.0; xmax = 1.0;
 
