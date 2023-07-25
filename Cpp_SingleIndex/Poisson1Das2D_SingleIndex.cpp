@@ -50,15 +50,15 @@ int main(int argc, char **args) {
   offset_i_vec[0] = 0;
   offset_j_vec[0] = 0;
 
-  my_nx_vec[1] = 70;
-  my_ny_vec[1] = 60;
-  offset_i_vec[1] = 130;
-  offset_j_vec[1] = 0;
+  my_nx_vec[1] = 130;
+  my_ny_vec[1] = 40;
+  offset_i_vec[1] = 0;
+  offset_j_vec[1] = 60;
 
-  my_nx_vec[2] = 130;
-  my_ny_vec[2] = 40;
-  offset_i_vec[2] = 0;
-  offset_j_vec[2] = 60;
+  my_nx_vec[2] = 70;
+  my_ny_vec[2] = 60;
+  offset_i_vec[2] = 130;
+  offset_j_vec[2] = 0;
 
   my_nx_vec[3] = 70;
   my_ny_vec[3] = 40;
