@@ -27,7 +27,7 @@ int main(int argc, char **args) {
   // SETUP BEGINS
 
   // Setting up a problem to demonstrate for just 4 processors
-  int nx = 200, ny = 200;
+  int nx = 200, ny = 100;
 
   MPI_Comm_rank(PETSC_COMM_WORLD, &my_rank);
   MPI_Comm_size(PETSC_COMM_WORLD, &nprocs);
@@ -45,25 +45,25 @@ int main(int argc, char **args) {
   jend_vec.resize(nprocs);
   idx_start_vec.resize(nprocs, 0.0);
 
-  my_nx_vec[0] = 100;
-  my_ny_vec[0] = 100;
+  my_nx_vec[0] = 130;
+  my_ny_vec[0] = 60;
   offset_i_vec[0] = 0;
   offset_j_vec[0] = 0;
 
-  my_nx_vec[1] = 100;
-  my_ny_vec[1] = 100;
-  offset_i_vec[1] = 100;
+  my_nx_vec[1] = 70;
+  my_ny_vec[1] = 60;
+  offset_i_vec[1] = 130;
   offset_j_vec[1] = 0;
 
-  my_nx_vec[2] = 100;
-  my_ny_vec[2] = 100;
+  my_nx_vec[2] = 130;
+  my_ny_vec[2] = 40;
   offset_i_vec[2] = 0;
-  offset_j_vec[2] = 100;
+  offset_j_vec[2] = 60;
 
-  my_nx_vec[3] = 100;
-  my_ny_vec[3] = 100;
-  offset_i_vec[3] = 100;
-  offset_j_vec[3] = 100;
+  my_nx_vec[3] = 70;
+  my_ny_vec[3] = 40;
+  offset_i_vec[3] = 130;
+  offset_j_vec[3] = 60;
 
 
   for (int rank = 0; rank <= nprocs - 1; rank++) {
