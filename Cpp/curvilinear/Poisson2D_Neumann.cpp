@@ -152,7 +152,8 @@ int main(int argc,char **argv)
   ierr = KSPCreate(PETSC_COMM_WORLD,&ksp);CHKERRQ(ierr); // Create a context used to to solve a linear system
   
   // NS: Create the grid
-  ierr = DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE,DMDA_STENCIL_BOX,nx-1,ny-1,PETSC_DECIDE,PETSC_DECIDE,1,1,0,0,&da);CHKERRQ(ierr);
+  //ierr = DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE,DMDA_STENCIL_BOX,nx-1,ny-1,PETSC_DECIDE,PETSC_DECIDE,1,1,0,0,&da);CHKERRQ(ierr);
+  ierr = DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC, DMDA_STENCIL_BOX,nx-1,ny-1,PETSC_DECIDE,PETSC_DECIDE,1,2,0,0,&da);CHKERRQ(ierr);
   //ierr = DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE,DMDA_STENCIL_STAR,nx,ny,2,2,1,1,lx,ly,&da);CHKERRQ(ierr);
   
   ierr = DMSetFromOptions(da);CHKERRQ(ierr); // NS: Set da using the command-line arguments
