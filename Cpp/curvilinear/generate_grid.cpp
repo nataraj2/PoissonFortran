@@ -30,7 +30,8 @@ void get_curv_grid(double** &x,double** &y,int Nx,int Ny)
 		}}
 		
     char filename[20];
-	sprintf(filename, "t=%i.dat",0);
+	sprintf(filename, "grid.dat");
+	// sprintf(filename, "t=%i.dat",0);
 	FILE *fid = fopen (filename, "w");
 	fprintf(fid, "title = \"sample mesh\"\n");
     fprintf(fid, "variables = \"x\", \"y\"\n");

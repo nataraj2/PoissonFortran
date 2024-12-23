@@ -43,8 +43,9 @@ using namespace std;
 vector<vector<double>> rhs;
 extern PetscErrorCode ComputeMatrix(KSP,Mat,Mat,void*);
 extern PetscErrorCode ComputeRHS(KSP,Vec,void*);
-void apply_face_dpdn(int k,int nx,int ny,MatStencil &row,MatStencil col[],PetscScalar v[],double** kk_f,double** xi_c,double** eta_c,double** inv_Jac,int face);
+void apply_face_dpdn(int k,int nxc,int nyc,MatStencil &row,MatStencil col[],PetscScalar v[],double** kk_f,double** xi_c,double** eta_c,double** inv_Jac,int face);
 void output_solution_to_file(KSP &ksp, Vec &x);
+void output_p3d_file(KSP &ksp, Vec &x,double** Xc, double** Yc);
 
 typedef enum {DIRICHLET, NEUMANN} BCType;
 
@@ -63,9 +64,8 @@ double** xi_yf;
 double** eta_xf;
 double** eta_yf;
 
-//int btm, lft, tp, rght;
 int btm = 1; int lft = 2; int tp = 3; int rght = 4;
-int Ncols = 1;
+int Ncols = 6;
 int main(int argc,char **argv)
 {
   KSP			 ksp;
@@ -77,8 +77,8 @@ int main(int argc,char **argv)
   Vec 			 x;
   PetscInt       xm,ym,xs,ys;
 
-  PetscInt nx = 101;
-  PetscInt ny = 101;
+  PetscInt nx = 201;
+  PetscInt ny = 201;
   PetscInt lx[] = {40,60};
   PetscInt ly[] = {40,60};
   
@@ -152,8 +152,7 @@ int main(int argc,char **argv)
   ierr = KSPCreate(PETSC_COMM_WORLD,&ksp);CHKERRQ(ierr); // Create a context used to to solve a linear system
   
   // NS: Create the grid
-  //ierr = DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE,DMDA_STENCIL_BOX,nx-1,ny-1,PETSC_DECIDE,PETSC_DECIDE,1,1,0,0,&da);CHKERRQ(ierr);
-  ierr = DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC, DMDA_STENCIL_BOX,nx-1,ny-1,PETSC_DECIDE,PETSC_DECIDE,1,2,0,0,&da);CHKERRQ(ierr);
+  ierr = DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC,DMDA_STENCIL_BOX,nx-1,ny-1,PETSC_DECIDE,PETSC_DECIDE,1,1,0,0,&da);CHKERRQ(ierr);
   //ierr = DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE,DMDA_STENCIL_STAR,nx,ny,2,2,1,1,lx,ly,&da);CHKERRQ(ierr);
   
   ierr = DMSetFromOptions(da);CHKERRQ(ierr); // NS: Set da using the command-line arguments
@@ -163,8 +162,8 @@ int main(int argc,char **argv)
   ierr = KSPSetDM(ksp,da);CHKERRQ(ierr);
 
   PetscOptionsBegin(PETSC_COMM_WORLD, "", "Options for the inhomogeneous Poisson equation", "DM");
-  //bc		  = (PetscInt)NEUMANN;
-  //user.bcType = (BCType)bc;
+  bc		  = (PetscInt)NEUMANN;
+  user.bcType = (BCType)bc;
   PetscOptionsEnd();
 
   //PetscScalar Hx   = 1.0 / (PetscReal)(nx);
@@ -200,7 +199,8 @@ int main(int argc,char **argv)
   ierr = KSPGetSolution(ksp,&x);CHKERRQ(ierr);
 
   //output_solution_to_file(ksp,x);
-
+  output_p3d_file(ksp,x,Xc,Yc);
+  
   ierr = KSPDestroy(&ksp);CHKERRQ(ierr);	// NS: Free the KSP context and all storage associated with it
   ierr = DMDestroy(&da);CHKERRQ(ierr);
   ierr = PetscFinalize();
@@ -239,7 +239,7 @@ PetscErrorCode ComputeRHS(KSP ksp,Vec b,void *ctx)
 {
   UserContext   *user = (UserContext*)ctx;
   PetscErrorCode ierr;
-  PetscInt     i,j,mx,my,xm,ym,xs,ys,nx,ny;
+  PetscInt     i,j,mx,my,xm,ym,xs,ys,nxc,nyc;
   PetscScalar   Hx,Hy;
   PetscScalar   **array;
   DM             da;
@@ -249,8 +249,8 @@ PetscErrorCode ComputeRHS(KSP ksp,Vec b,void *ctx)
   ierr = DMDAGetInfo(da, 0, &mx, &my, 0,0,0,0,0,0,0,0,0,0);CHKERRQ(ierr);
   
   cout << "In ComputeRHS: mx = " << mx <<  " my = " << my << endl;
-  nx = mx;
-  ny = my;
+  nxc = mx;
+  nyc = my;
   
   Hx   = 1.0 / (PetscReal)(mx);
   Hy   = 1.0 / (PetscReal)(my);
@@ -261,8 +261,8 @@ PetscErrorCode ComputeRHS(KSP ksp,Vec b,void *ctx)
          array[j][i] = rhs[i-xs][j-ys];
     }
   }*/
-  for(int i=0;i<nx-1;i++){	
-	for(int j=0;j<ny-1;j++)
+  for(int i=0;i<nxc;i++){	
+	for(int j=0;j<nyc;j++)
 	{
 		array[j][i] = rhs[i][j];
 	}}
@@ -272,13 +272,13 @@ PetscErrorCode ComputeRHS(KSP ksp,Vec b,void *ctx)
 
   /* force right hand side to be consistent for singular matrix */
   /* note this is really a hack, normally the model would provide you with a consistent right handside */
-  /*if (user->bcType == NEUMANN) {
+  if (user->bcType == NEUMANN) {
     MatNullSpace nullspace;
 
     ierr = MatNullSpaceCreate(PETSC_COMM_WORLD,PETSC_TRUE,0,0,&nullspace);CHKERRQ(ierr);
     ierr = MatNullSpaceRemove(nullspace,b);CHKERRQ(ierr);
     ierr = MatNullSpaceDestroy(&nullspace);CHKERRQ(ierr);
-  }*/
+  }
   PetscFunctionReturn(0);
 }
 
@@ -286,7 +286,7 @@ PetscErrorCode ComputeMatrix(KSP ksp, Mat J,Mat jac, void *ctx)
 {
   UserContext	*user = (UserContext*)ctx;
   PetscErrorCode ierr;
-  PetscInt	   i,j,mx,my,xm,ym,xs,ys,num, numi, numj,nx,ny;
+  PetscInt	   i,j,mx,my,xm,ym,xs,ys,num, numi, numj,nxc,nyc;
   PetscScalar	v[Ncols];
   MatStencil	 row, col[Ncols];
   DM			 da;
@@ -297,36 +297,35 @@ PetscErrorCode ComputeMatrix(KSP ksp, Mat J,Mat jac, void *ctx)
   ierr  = DMDAGetCorners(da,&xs,&ys,0,&xm,&ym,0);CHKERRQ(ierr);
 	
   cout << "In ComputeMatrix: mx = " << mx <<  " my = " << my << endl;
-  nx = mx;
-  ny = my;
+  nxc = mx;
+  nyc = my;
   
-  for (int k=0; k<(nx-1)*(ny-1); k++) 
+  for (int k=0; k<nxc*nyc; k++) 
   {
-	  apply_face_dpdn(k,nx,ny,row,col,v,xi_xf,xi_xc,eta_xc,inv_Jac,rght);
-  	  cout << "row.i = " << row.i << "   row.j = " << row.j << "   col[0].i = " << col[0].i << "   col[0].j = " << col[0].j << endl;
+	  apply_face_dpdn(k,nxc,nyc,row,col,v,xi_xf,xi_xc,eta_xc,inv_Jac,rght);
+  	  //cout << "row.i = " << row.i << "   row.j = " << row.j << "   col[0].i = " << col[0].i << "   col[0].j = " << col[0].j << endl;
 	  ierr = MatSetValuesStencil(jac,1,&row,Ncols,col,v,ADD_VALUES);CHKERRQ(ierr);
-	  //ierr = MatSetValuesStencil(jac,1,&row,1,&row,v,INSERT_VALUES);CHKERRQ(ierr);
 	    
-	  /*apply_face_dpdn(k,nx,ny,row,col,v,xi_xf,xi_xc,eta_xc,inv_Jac,lft);
+	  apply_face_dpdn(k,nxc,nyc,row,col,v,xi_xf,xi_xc,eta_xc,inv_Jac,lft);
 	  ierr = MatSetValuesStencil(jac,1,&row,Ncols,col,v,ADD_VALUES);CHKERRQ(ierr);
 	  
-	  apply_face_dpdn(k,nx,ny,row,col,v,xi_yf,xi_yc,eta_yc,inv_Jac,rght); 
+	  apply_face_dpdn(k,nxc,nyc,row,col,v,xi_yf,xi_yc,eta_yc,inv_Jac,rght); 
 	  ierr = MatSetValuesStencil(jac,1,&row,Ncols,col,v,ADD_VALUES);CHKERRQ(ierr);
 	  
-	  apply_face_dpdn(k,nx,ny,row,col,v,xi_yf,xi_yc,eta_yc,inv_Jac,lft);
+	  apply_face_dpdn(k,nxc,nyc,row,col,v,xi_yf,xi_yc,eta_yc,inv_Jac,lft);
 	  ierr = MatSetValuesStencil(jac,1,&row,Ncols,col,v,ADD_VALUES);CHKERRQ(ierr);
 	  
-	  apply_face_dpdn(k,nx,ny,row,col,v,eta_xf,eta_xc,xi_xc,inv_Jac,tp);
+	  apply_face_dpdn(k,nxc,nyc,row,col,v,eta_xf,eta_xc,xi_xc,inv_Jac,tp);
 	  ierr = MatSetValuesStencil(jac,1,&row,Ncols,col,v,ADD_VALUES);CHKERRQ(ierr);
 	  
-	  apply_face_dpdn(k,nx,ny,row,col,v,eta_xf,eta_xc,xi_xc,inv_Jac,btm);
+	  apply_face_dpdn(k,nxc,nyc,row,col,v,eta_xf,eta_xc,xi_xc,inv_Jac,btm);
 	  ierr = MatSetValuesStencil(jac,1,&row,Ncols,col,v,ADD_VALUES);CHKERRQ(ierr);
 	  
-	  apply_face_dpdn(k,nx,ny,row,col,v,eta_yf,eta_yc,xi_yc,inv_Jac,tp);
+	  apply_face_dpdn(k,nxc,nyc,row,col,v,eta_yf,eta_yc,xi_yc,inv_Jac,tp);
 	  ierr = MatSetValuesStencil(jac,1,&row,Ncols,col,v,ADD_VALUES);CHKERRQ(ierr);
 	  
-	  apply_face_dpdn(k,nx,ny,row,col,v,eta_yf,eta_yc,xi_yc,inv_Jac,btm);
-	  ierr = MatSetValuesStencil(jac,1,&row,Ncols,col,v,ADD_VALUES);CHKERRQ(ierr);*/
+	  apply_face_dpdn(k,nxc,nyc,row,col,v,eta_yf,eta_yc,xi_yc,inv_Jac,btm);
+	  ierr = MatSetValuesStencil(jac,1,&row,Ncols,col,v,ADD_VALUES);CHKERRQ(ierr);
   }
   
 /*  for (j=ys; j<ys+ym; j++) {
@@ -379,20 +378,20 @@ PetscErrorCode ComputeMatrix(KSP ksp, Mat J,Mat jac, void *ctx)
   }*/
   ierr = MatAssemblyBegin(jac,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
   ierr = MatAssemblyEnd(jac,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-  /*if (user->bcType == NEUMANN) {
+  if (user->bcType == NEUMANN) {
 	MatNullSpace nullspace;
 
 	ierr = MatNullSpaceCreate(PETSC_COMM_WORLD,PETSC_TRUE,0,0,&nullspace);CHKERRQ(ierr);
 	ierr = MatSetNullSpace(J,nullspace);CHKERRQ(ierr);
 	ierr = MatNullSpaceDestroy(&nullspace);CHKERRQ(ierr);
-  }*/
+  }
   PetscFunctionReturn(0);
 }
 
-void apply_face_dpdn(int k,int nx,int ny,MatStencil &row,MatStencil col[],PetscScalar v[],double** kk_f,double** xi_c,double** eta_c,double** inv_Jac,int face)
+void apply_face_dpdn(int k,int nxc,int nyc,MatStencil &row,MatStencil col[],PetscScalar v[],double** kk_f,double** xi_c,double** eta_c,double** inv_Jac,int face)
 {
-  	int j = floor(k/(nx-1));
-  	int i = k - j*(nx-1);
+  	int j = floor(k/nxc);
+  	int i = k - j*nxc;
   
 	// Set indices for face normal derivative calculation
 	int iface, jface, nml;
@@ -420,10 +419,10 @@ void apply_face_dpdn(int k,int nx,int ny,MatStencil &row,MatStencil col[],PetscS
 	    iin = i;     	jin = j;		
 		/// MODIFY INDEX FOR PERIODIC BOUNDARY ///
 		if (iout<0){
-		    iout = (nx-1) + iout;
+		    iout = nxc + iout;
 		}
-		else if (iout>(nx-2)){
-			iout = iout - (nx-1);
+		else if (iout>(nxc-1)){
+			iout = iout - nxc;
 		}
 		//////////////////////////////////////////
 		
@@ -437,10 +436,10 @@ void apply_face_dpdn(int k,int nx,int ny,MatStencil &row,MatStencil col[],PetscS
 	    iin = i;     jin = j;		
 		/// MODIFY INDEX FOR PERIODIC BOUNDARY ///
 		if (jout<0){
-			jout = (ny-1) + jout;
+			jout = nyc + jout;
 		}
-		else if (jout>(ny-2)){
-		    jout = jout - (ny-1);
+		else if (jout>(nyc-1)){
+		    jout = jout - nyc;
 		}
 		//////////////////////////////////////////
 		
@@ -453,36 +452,36 @@ void apply_face_dpdn(int k,int nx,int ny,MatStencil &row,MatStencil col[],PetscS
 	/// MODIFY INDEX FOR PERIODIC BOUNDARY ///
     for (int idx=0; idx<4; idx++){
 		if (it[idx]<0){
-			it[idx] = (nx-1) + it[idx];
+			it[idx] = nxc + it[idx];
 		}
-		else if (it[idx]>(nx-2)){
-			it[idx] = it[idx] - (nx-1);
+		else if (it[idx]>(nxc-1)){
+			it[idx] = it[idx] - nxc;
 		}
 		
 		if (jt[idx]<0){
-			jt[idx] = (ny-1) + jt[idx];
+			jt[idx] = nyc + jt[idx];
 		}
-		else if (jt[idx]>(ny-2)){
-			jt[idx] = jt[idx] - (ny-1);
+		else if (jt[idx]>(nyc-1)){
+			jt[idx] = jt[idx] - nyc;
 		}
 	}
 	//////////////////////////////////////////
 	
-	cout << "In apply_face_dpdn: k = " << k << "   row.i = " << i << "   row.j = " << j << "   col[0].i = " << iout << "   col[0].j = " << jout <<  
+	/*cout << "In apply_face_dpdn: k = " << k << "   row.i = " << i << "   row.j = " << j << "   col[0].i = " << iout << "   col[0].j = " << jout <<  
 		"   col[1].i = " << iin << "   col[1].j = " << jin << endl;
 	cout << "   col[2].i = " << it[0] << "   col[2].j = " << jt[0] << "   col[3].i = " << it[1] << "   col[3].j = " << jt[1] 
-		 << "   col[4].i = " << it[2] << "   col[4].j = " << jt[2] << "   col[5].i = " << it[3] << "   col[5].j = " << jt[3] << endl;
+		 << "   col[4].i = " << it[2] << "   col[4].j = " << jt[2] << "   col[5].i = " << it[3] << "   col[5].j = " << jt[3] << endl;*/
 	
 	row.i = i; row.j = j;
 	// normal derivative on the face
 	col[0].i = iout;   col[0].j = jout;		v[0] = kk_f[iface][jface] * xi_c[iout][jout] * inv_Jac[iout][jout];
-// 	col[1].i = iin;   col[1].j = jin;		v[1] = - kk_f[iface][jface] * xi_c[iin][jin] * inv_Jac[iin][jin];
-//
-// 	// tangential derivative on the face
-// 	col[2].i = it[0];   col[2].j = jt[0];		v[2] = nml*0.25*kk_f[iface][jface] * eta_c[it[0]][jt[0]] * inv_Jac[it[0]][jt[0]];
-// 	col[3].i = it[1];   col[3].j = jt[1];		v[3] = nml*0.25*kk_f[iface][jface] * eta_c[it[1]][jt[1]] * inv_Jac[it[1]][jt[1]];
-// 	col[4].i = it[2];   col[4].j = jt[2];		v[4] = - nml*0.25*kk_f[iface][jface] * eta_c[it[2]][jt[2]] * inv_Jac[it[2]][jt[2]];
-// 	col[5].i = it[3];   col[5].j = jt[3];		v[5] = - nml*0.25*kk_f[iface][jface] * eta_c[it[3]][jt[3]] * inv_Jac[it[3]][jt[3]];
+ 	col[1].i = iin;   col[1].j = jin;		v[1] = - kk_f[iface][jface] * xi_c[iin][jin] * inv_Jac[iin][jin];
+	
+    // tangential derivative on the face
+ 	col[2].i = it[0];   col[2].j = jt[0];		v[2] = nml*0.25*kk_f[iface][jface] * eta_c[it[0]][jt[0]] * inv_Jac[it[0]][jt[0]];
+ 	col[3].i = it[1];   col[3].j = jt[1];		v[3] = nml*0.25*kk_f[iface][jface] * eta_c[it[1]][jt[1]] * inv_Jac[it[1]][jt[1]];
+ 	col[4].i = it[2];   col[4].j = jt[2];		v[4] = - nml*0.25*kk_f[iface][jface] * eta_c[it[2]][jt[2]] * inv_Jac[it[2]][jt[2]];
+ 	col[5].i = it[3];   col[5].j = jt[3];		v[5] = - nml*0.25*kk_f[iface][jface] * eta_c[it[3]][jt[3]] * inv_Jac[it[3]][jt[3]];
 }
 
 PetscErrorCode ComputeMatrix_old(KSP ksp, Mat J,Mat jac, void *ctx)
@@ -603,6 +602,42 @@ void output_solution_to_file(KSP &ksp, Vec &x)
 	DMDAVecRestoreArray(dm,x,&barray);
 
 
+}
+
+void output_p3d_file(KSP &ksp, Vec &x,double** Xc, double** Yc)
+{
+	PetscErrorCode ierr;
+	DM			 dm;
+	PetscScalar	**barray;
+	PetscScalar	Hx, Hy;
+	PetscInt	   i,j,mx,my,xm,ym,xs,ys;
+	int rank;
+	
+	MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
+
+	PetscFunctionBeginUser;
+	ierr  = KSPGetDM(ksp,&dm);
+	ierr  = DMDAGetInfo(dm, 0, &mx, &my, 0,0,0,0,0,0,0,0,0,0);
+	ierr  = DMDAVecGetArray(dm,x,&barray);
+	
+	double exactSol[mx][my];
+	
+    char filename[20];
+	sprintf(filename, "t=%i.dat",0);
+	FILE *fid = fopen (filename, "w");
+	fprintf(fid, "title = \"sample mesh\"\n");
+    fprintf(fid, "variables = \"x\", \"y\", \"sol\", \"exactSol\", \"error\"\n");
+    fprintf(fid, "zone i=%d, j=%d, f=point\n",mx,my);
+	for(int j=0;j<my;j++){
+       for(int i=0;i<mx;i++){
+		   exactSol[i][j] = cos(2*pi*Xc[i][j])*cos(2*pi*Yc[i][j]);
+		   double error = exactSol[i][j] - barray[j][i];
+           fprintf(fid, "%e   %e   %e   %e   %e\n",Xc[i][j],Yc[i][j],barray[j][i],exactSol[i][j],error);
+       }
+    }
+	fclose(fid);
+	
+	DMDAVecRestoreArray(dm,x,&barray);
 }
 
 /*TEST
