@@ -77,8 +77,8 @@ int main(int argc,char **argv)
   Vec 			 x;
   PetscInt       xm,ym,xs,ys;
 
-  PetscInt nx = 201;
-  PetscInt ny = 201;
+  PetscInt nx = 51;
+  PetscInt ny = 51;
   PetscInt lx[] = {40,60};
   PetscInt ly[] = {40,60};
   
@@ -191,7 +191,8 @@ int main(int argc,char **argv)
 	  int i = k - j*(nx-1);
 	  rhs[i][j] = -8.0*pi*pi*cos(2.0*pi*Xc[i][j])*cos(2.0*pi*Yc[i][j]) * inv_Jac[i][j];
   }
-
+  rhs[0][0] = cos(2.0*pi*Xc[0][0])*cos(2.0*pi*Yc[0][0]);	// To fix a point value for avoiding singularity with periodic BCs
+	  
   ierr = KSPSetComputeRHS(ksp,ComputeRHS,&user);CHKERRQ(ierr);
   ierr = KSPSetComputeOperators(ksp,ComputeMatrix,&user);CHKERRQ(ierr);
   ierr = KSPSetFromOptions(ksp);CHKERRQ(ierr);	// NS: Set the algorithm, preconditioner, and the associated parameters, using the command-line arguments
@@ -266,19 +267,19 @@ PetscErrorCode ComputeRHS(KSP ksp,Vec b,void *ctx)
 	{
 		array[j][i] = rhs[i][j];
 	}}
-  ierr = DMDAVecRestoreArray(da, b, &array);CHKERRQ(ierr);
+  ierr = DMDAVecRestoreArray(da, b, &array);CHKERRQ(ierr);  
   ierr = VecAssemblyBegin(b);CHKERRQ(ierr);
   ierr = VecAssemblyEnd(b);CHKERRQ(ierr);
 
   /* force right hand side to be consistent for singular matrix */
   /* note this is really a hack, normally the model would provide you with a consistent right handside */
-  if (user->bcType == NEUMANN) {
+  /*if (user->bcType == NEUMANN) {
     MatNullSpace nullspace;
 
     ierr = MatNullSpaceCreate(PETSC_COMM_WORLD,PETSC_TRUE,0,0,&nullspace);CHKERRQ(ierr);
     ierr = MatNullSpaceRemove(nullspace,b);CHKERRQ(ierr);
     ierr = MatNullSpaceDestroy(&nullspace);CHKERRQ(ierr);
-  }
+  }*/
   PetscFunctionReturn(0);
 }
 
@@ -327,64 +328,20 @@ PetscErrorCode ComputeMatrix(KSP ksp, Mat J,Mat jac, void *ctx)
 	  apply_face_dpdn(k,nxc,nyc,row,col,v,eta_yf,eta_yc,xi_yc,inv_Jac,btm);
 	  ierr = MatSetValuesStencil(jac,1,&row,Ncols,col,v,ADD_VALUES);CHKERRQ(ierr);
   }
-  
-/*  for (j=ys; j<ys+ym; j++) {
-	for (i=xs; i<xs+xm; i++) {
-	  row.i = i; row.j = j;
-	  if ((i==0 || j==0 || i==mx-1 || j==my-1)) {
-		if (user->bcType == DIRICHLET) {
-		  v[0] = 2.0*(HxdHy + HydHx);
-		  ierr = MatSetValuesStencil(jac,1,&row,1,&row,v,INSERT_VALUES);CHKERRQ(ierr);
-		  SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Dirichlet boundary conditions not supported !\n");
-		} else if (user->bcType == NEUMANN) {
-		  num = 0; numi=0; numj=0;
-		  if (j!=0) {
-			v[num] = -HxdHy;
-			col[num].i = i;
-			col[num].j = j-1;
-			num++; numj++;
-		  }
-		  if (i!=0) {
-			v[num]	 = -HydHx;
-			col[num].i = i-1;
-			col[num].j = j;
-			num++; numi++;
-		  }
-		  if (i!=mx-1) {
-			v[num]	 = -HydHx;
-			col[num].i = i+1;
-			col[num].j = j;
-			num++; numi++;
-		  }
-		  if (j!=my-1) {
-			v[num]	 = -HxdHy;
-			col[num].i = i;
-			col[num].j = j+1;
-			num++; numj++;
-		  }
-		  v[num] = (PetscReal)(numj)*HxdHy + (PetscReal)(numi)*HydHx; col[num].i = i;   col[num].j = j;
-		  num++;
-		  ierr = MatSetValuesStencil(jac,1,&row,num,col,v,INSERT_VALUES);CHKERRQ(ierr);
-		}
-	  } else {
-		v[0] = -HxdHy;			  col[0].i = i;   col[0].j = j-1;
-		v[1] = -HydHx;			  col[1].i = i-1; col[1].j = j;
-		v[2] = 2.0*(HxdHy + HydHx); col[2].i = i;   col[2].j = j;
-		v[3] = -HydHx;			  col[3].i = i+1; col[3].j = j;
-		v[4] = -HxdHy;			  col[4].i = i;   col[4].j = j+1;
-		ierr = MatSetValuesStencil(jac,1,&row,5,col,v,INSERT_VALUES);CHKERRQ(ierr);
-	  }
-	}
-  }*/
+    
   ierr = MatAssemblyBegin(jac,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
   ierr = MatAssemblyEnd(jac,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-  if (user->bcType == NEUMANN) {
+  
+  PetscInt fixedIdx = 0;
+  ierr = MatZeroRows(jac, 1, &fixedIdx, 1.0, NULL, NULL);CHKERRQ(ierr);	  // To fix a point value for avoiding singularity with periodic BCs
+  
+  /*if (user->bcType == NEUMANN) {
 	MatNullSpace nullspace;
 
 	ierr = MatNullSpaceCreate(PETSC_COMM_WORLD,PETSC_TRUE,0,0,&nullspace);CHKERRQ(ierr);
 	ierr = MatSetNullSpace(J,nullspace);CHKERRQ(ierr);
 	ierr = MatNullSpaceDestroy(&nullspace);CHKERRQ(ierr);
-  }
+  }*/
   PetscFunctionReturn(0);
 }
 
