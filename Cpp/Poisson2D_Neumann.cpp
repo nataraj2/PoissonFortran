@@ -38,6 +38,9 @@ static char help[] = "Solves 2D inhomogeneous Laplacian using multigrid.\n\n";
 #include <iostream>
 #include <vector>
 using namespace std;
+#define _USE_MATH_DEFINES
+
+const double pi = M_PI;
 
 vector<vector<double>> rhs;
 extern PetscErrorCode ComputeMatrix(KSP,Mat,Mat,void*);
@@ -80,13 +83,19 @@ void output_solution_to_file(KSP &ksp, Vec &x)
 	filename = filename + ".txt";
 
 	sol_file = fopen(filename.c_str(),"w");
-
+	double L2_err = 0.0;
 	for (j=ys; j<ys+ym; j++) {
 	   for (i=xs; i<xs+xm; i++) {
 		   fprintf(sol_file, "%d %d %0.15g %0.15g %0.15g\n", i, j, ((PetscReal)i+0.5)*Hx, ((PetscReal)j+0.5)*Hy, barray[j][i]);
+		   double exactSol = cos(2*pi*((PetscReal)i+0.5)*Hx)*cos(2*pi*((PetscReal)j+0.5)*Hy);
+		   double error = exactSol - barray[j][i];
+		   L2_err = L2_err + pow(error,2.0);
 	   }
 	}
-
+	double tot_L2_err;
+	MPI_Allreduce(&L2_err, &tot_L2_err, 1, MPI_DOUBLE, MPI_SUM, PETSC_COMM_WORLD);
+	L2_err = sqrt(L2_err/(xm*ym));
+	cout << "Rank: " << rank << "  Local L2 error = " << L2_err << "  Total L2 error = " << sqrt(tot_L2_err/(mx*my)) << endl;
 	fclose(sol_file);
 
 	DMDAVecRestoreArray(dm,x,&barray);
@@ -117,10 +126,10 @@ int main(int argc,char **argv)
 
   ierr = KSPSetDM(ksp,da);CHKERRQ(ierr);
 
-  ierr		= PetscOptionsBegin(PETSC_COMM_WORLD, "", "Options for the inhomogeneous Poisson equation", "DM");CHKERRQ(ierr);
+  PetscOptionsBegin(PETSC_COMM_WORLD, "", "Options for the inhomogeneous Poisson equation", "DM");
   bc		  = (PetscInt)NEUMANN;
   user.bcType = (BCType)bc;
-  ierr		= PetscOptionsEnd();CHKERRQ(ierr);
+  PetscOptionsEnd();
 
   PetscScalar Hx   = 1.0 / (PetscReal)(nx);
   PetscScalar Hy   = 1.0 / (PetscReal)(ny);
