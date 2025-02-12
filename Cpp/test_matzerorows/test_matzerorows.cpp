@@ -1,6 +1,8 @@
 #include <petscdmda.h>
 #include <petscmat.h>
 #include <petscvec.h>
+#include <vector>
+#include <iostream>
 using namespace std;
 
 int main(int argc, char **argv) {
@@ -9,7 +11,7 @@ int main(int argc, char **argv) {
     DM da;
     Mat A;
     Vec b;
-    PetscInt mx = 8, my = 8;  // Global grid size (6x6)
+    PetscInt mx = 5, my = 5;  // Global grid size (6x6)
     PetscInt rank;
 
     MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
@@ -29,15 +31,13 @@ int main(int argc, char **argv) {
     PetscInt xs, ys, xm, ym;  // Local grid corners and sizes
     DMDAGetCorners(da, &xs, &ys, NULL, &xm, &ym, NULL);
 
-    // Initialize A and b
-    PetscInt i, j, row;
-    PetscScalar v;
-    for (j = ys; j < ys + ym; j++) {
-        for (i = xs; i < xs + xm; i++) {
-            row = j * mx + i;  // Convert (i, j) to global row index
-            v = 4.0;
+    // Initialize matrix A and vector b
+    for (PetscInt j = ys; j < ys + ym; j++) {
+        for (PetscInt i = xs; i < xs + xm; i++) {
+            PetscInt row = j * mx + i;  // Application ordering
+            PetscScalar v = 4.0;
             MatSetValue(A, row, row, v, INSERT_VALUES);
-            VecSetValue(b, row, 1.0, INSERT_VALUES); // RHS initialization
+            VecSetValue(b, row, 1.0, INSERT_VALUES);
         }
     }
 
@@ -46,24 +46,27 @@ int main(int argc, char **argv) {
     VecAssemblyBegin(b);
     VecAssemblyEnd(b);
 
-    // Identify boundary rows to zero
-    PetscInt zeroedRows[mx * 2 + my * 2 - 4];  // Perimeter points
-    //std::vector<int> ibkRows;
-    PetscInt count = 0;
 
-    for (j = 0; j < my; j++) {
-        for (i = 0; i < mx; i++) {
+    // Get AO mapping (Application Order to PETSc order)
+    AO ao;
+    DMDAGetAO(da, &ao);
+
+    // Identify boundary rows in application order
+    std::vector<PetscInt> zeroedRows;
+    for (PetscInt j = 0; j < my; j++) {
+        for (PetscInt i = 0; i < mx; i++) {
             if (i == 0 || i == mx - 1 || j == 0 || j == my - 1) { // Boundary points
-                row = j * mx + i;
-                if (row >= xs * mx + ys && row < (xs + xm) * mx + (ys + ym)) { // Local check
-                    zeroedRows[count++] = row;
-                }
+                PetscInt row = j * mx + i;
+                zeroedRows.push_back(row);
             }
         }
     }
 
-    // Apply MatZeroRows in parallel
-    MatZeroRows(A, count, zeroedRows, 1.0, NULL, b);
+    // Convert to PETSc ordering
+    AOApplicationToPetsc(ao, zeroedRows.size(), zeroedRows.data());
+
+    // Apply MatZeroRows
+    MatZeroRows(A, zeroedRows.size(), zeroedRows.data(), 1.0, NULL, NULL);
 
     MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY);
